@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>齐民要术知识图谱</title>
+    <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.2.2/echarts.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            align-items: flex-start;
+        }
+        .search-container {
+            width: 350px;
+            flex-shrink: 0;
+        }
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .search-results {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+            position: absolute;
+            width: 320px;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .info-panel {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            min-height: 100px;
+        }
+        .entity-info, .relation-info {
+            flex: 1;
+        }
+        .entity-info h3, .relation-info h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 16px;
+        }
+        .entity-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .entity-detail-item {
+            background-color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .relation-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .relation-item {
+            background-color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            font-size: 14px;
+        }
+        .result-item {
+            padding: 8px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+        }
+        .result-item:hover {
+            background-color: #e9ecef;
+        }
+        #graph-container {
+            width: 100%;
+            height: 700px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: white;
+        }
+        input {
+            padding: 8px 12px;
+            width: 250px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            padding: 8px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="search-container">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="输入实体名称搜索...">
+                    <button onclick="searchNode()">搜索</button>
+                </div>
+                <div id="searchResults" class="search-results"></div>
+            </div>
+            <div class="info-panel">
+                <div class="entity-info">
+                    <h3>实体信息</h3>
+                    <div id="entityInfo" class="entity-details">
+                        <p>选择一个实体以查看详细信息</p>
+                    </div>
+                </div>
+                <div class="relation-info">
+                    <h3>相关关系</h3>
+                    <div id="relationInfo" class="relation-list">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="graph-container"></div>
+    </div>
+
+    <script>
+        let myChart = echarts.init(document.getElementById('graph-container'));
+        let graph_data = null;
+        let currentNode = null;
+
+        // 定义不同类型节点的颜色
+        const categoryColors = [
+            '#c23531', '#2f4554', '#61a0a8', '#d48265', '#91c7ae',
+            '#749f83', '#ca8622', '#bda29a', '#6e7074', '#546570'
+        ];
+
+        fetch('/api/graph')
+            .then(response => response.json())
+            .then(data => {
+                graph_data = data;
+                updateChart(data);
+            });
+
+        function showEntityInfo(node) {
+            const entityInfo = document.getElementById('entityInfo');
+            const relationInfo = document.getElementById('relationInfo');
+            
+            // 显示实体基本信息
+            entityInfo.innerHTML = `
+                <div class="entity-detail-item"><strong>名称：</strong>${node.name}</div>
+                <div class="entity-detail-item"><strong>类型：</strong>${node.category}</div>
+                <div class="entity-detail-item"><strong>关联数：</strong>${node.value}</div>
+            `;
+
+            // 查找与该实体相关的所有关系
+            const relations = [];
+            graph_data.edges.forEach(edge => {
+                if (edge.source === node.id) {
+                    relations.push(`<div class="relation-item">→ ${edge.relation} → ${edge.target}</div>`);
+                }
+                if (edge.target === node.id) {
+                    relations.push(`<div class="relation-item">${edge.source} → ${edge.relation} →</div>`);
+                }
+            });
+
+            relationInfo.innerHTML = relations.join('') || '<p>没有相关关系</p>';
+        }
+
+        function updateChart(data) {
+            let option = {
+                title: {
+                    text: '齐民要术知识图谱',
+                    top: 'top',
+                    left: 'center',
+                    textStyle: {
+                        fontSize: 24
+                    }
+                },
+                tooltip: {
+                    formatter: function(params) {
+                        if (params.dataType === 'edge') {
+                            return `${params.data.source} --${params.data.relation}--> ${params.data.target}`;
+                        }
+                        return `${params.data.name}\n类型: ${params.data.category}\n连接数: ${params.data.value}`;
+                    }
+                },
+                legend: {
+                    data: data.categories.map(cat => cat.name),
+                    orient: 'vertical',
+                    left: 'left',
+                    top: 'middle'
+                },
+                series: [{
+                    type: 'graph',
+                    layout: 'force',
+                    categories: data.categories,
+                    data: data.nodes.map(node => ({
+                        ...node,
+                        symbolSize: Math.max(30, Math.min(50, node.value * 5)),
+                        label: {
+                            show: true,
+                            fontSize: 12
+                        }
+                    })),
+                    edges: data.edges.map(edge => ({
+                        ...edge,
+                        label: {
+                            show: true,
+                            formatter: edge.relation,
+                            fontSize: 10
+                        }
+                    })),
+                    force: {
+                        repulsion: 1500,
+                        edgeLength: 200,
+                        gravity: 0.2
+                    },
+                    roam: true,
+                    draggable: true,
+                    lineStyle: {
+                        color: '#2f4554',
+                        width: 1,
+                        curveness: 0.3
+                    },
+                    emphasis: {
+                        focus: 'adjacency',
+                        lineStyle: {
+                            width: 4
+                        }
+                    }
+                }]
+            };
+            myChart.setOption(option);
+
+            // 添加点击事件
+            myChart.on('click', function(params) {
+                if (params.dataType === 'node') {
+                    showEntityInfo(params.data);
+                    highlightNode(params.data);
+                }
+            });
+        }
+
+        function searchNode() {
+            let searchText = document.getElementById('searchInput').value.trim();
+            if (!searchText || !graph_data) return;
+
+            let matchedNodes = graph_data.nodes.filter(node => 
+                node.name.toLowerCase().includes(searchText.toLowerCase())
+            );
+
+            // 显示搜索结果
+            const searchResults = document.getElementById('searchResults');
+            if (matchedNodes.length > 0) {
+                searchResults.style.display = 'block';
+                searchResults.innerHTML = matchedNodes.map(node => `
+                    <div class="result-item" onclick="selectNode('${node.id}')">
+                        ${node.name} (${node.category})
+                    </div>
+                `).join('');
+            } else {
+                searchResults.innerHTML = '<div class="result-item">未找到匹配的实体</div>';
+                searchResults.style.display = 'block';
+            }
+        }
+
+        function selectNode(nodeId) {
+            const node = graph_data.nodes.find(n => n.id === nodeId);
+            if (node) {
+                showEntityInfo(node);
+                highlightNode(node);
+                document.getElementById('searchResults').style.display = 'none';
+                
+                // 添加动画效果
+                setTimeout(() => {
+                    myChart.dispatchAction({
+                        type: 'focusNodeAdjacency',
+                        seriesIndex: 0,
+                        dataIndex: graph_data.nodes.findIndex(n => n.id === nodeId)
+                    });
+                }, 500);
+            }
+        }
+
+        function highlightNode(node) {
+            let highlightNodes = [node.id];
+            let highlightEdges = [];
+            
+            // 查找所有与该节点相关的边和节点
+            graph_data.edges.forEach(edge => {
+                if (edge.source === node.id || edge.target === node.id) {
+                    highlightEdges.push(edge);
+                    if (edge.source === node.id) {
+                        highlightNodes.push(edge.target);
+                    } else {
+                        highlightNodes.push(edge.source);
+                    }
+                }
+            });
+
+            let option = myChart.getOption();
+            
+            // 更新节点样式
+            option.series[0].data = graph_data.nodes.map(n => ({
+                ...n,
+                symbolSize: highlightNodes.includes(n.id) ? 
+                    Math.max(50, Math.min(70, n.value * 7)) : 
+                    Math.max(20, Math.min(30, n.value * 3)),
+                itemStyle: {
+                    color: n.id === node.id ? '#ff4444' : 
+                           highlightNodes.includes(n.id) ? '#ff8888' : '#aaaaaa',
+                    opacity: highlightNodes.includes(n.id) ? 1 : 0.3
+                },
+                label: {
+                    show: highlightNodes.includes(n.id),
+                    fontSize: highlightNodes.includes(n.id) ? 14 : 12,
+                    fontWeight: highlightNodes.includes(n.id) ? 'bold' : 'normal'
+                }
+            }));
+
+            // 更新边的样式
+            option.series[0].edges = graph_data.edges.map(edge => {
+                const isHighlighted = highlightEdges.some(e => 
+                    e.source === edge.source && e.target === edge.target
+                );
+                return {
+                    ...edge,
+                    lineStyle: {
+                        color: isHighlighted ? '#ff4444' : '#aaaaaa',
+                        width: isHighlighted ? 2 : 1,
+                        opacity: isHighlighted ? 1 : 0.3,
+                        curveness: 0.3
+                    },
+                    label: {
+                        show: isHighlighted,
+                        formatter: edge.relation,
+                        fontSize: 12,
+                        fontWeight: 'bold',
+                        color: '#333'
+                    }
+                };
+            });
+
+            // 自动将视图中心移动到选中的节点
+            myChart.setOption(option);
+            myChart.centerGraphOnPoint(node);
+        }
+
+        // 添加居中方法
+        echarts.extendComponentModel({
+            type: 'graphView'
+        });
+
+        echarts.extendComponentView({
+            type: 'graphView'
+        });
+
+        echarts.registerAction({
+            type: 'graphCircular',
+            event: 'graphCircular',
+            update: 'updateLayout'
+        });
+
+        // 扩展ECharts，添加居中方法
+        myChart.centerGraphOnPoint = function(node) {
+            const coordSystem = this.getModel().getComponent('graphView').coordinateSystem;
+            if (!coordSystem.getBoundingRect) return;
+
+            setTimeout(() => {
+                // 获取当前视图的中心点
+                const viewCenter = coordSystem.getBoundingRect().center;
+                
+                // 获取节点的当前位置
+                const nodePosition = this.convertToPixel({seriesIndex: 0}, [node.x, node.y]);
+                
+                if (!nodePosition) return;
+                
+                // 计算需要移动的距离
+                const deltaX = viewCenter[0] - nodePosition[0];
+                const deltaY = viewCenter[1] - nodePosition[1];
+                
+                // 更新所有节点的位置
+                const option = this.getOption();
+                option.series[0].data = option.series[0].data.map(n => ({
+                    ...n,
+                    x: n.x + deltaX,
+                    y: n.y + deltaY
+                }));
+                
+                this.setOption(option);
+            }, 100);
+        };
+
+        // 点击空白处隐藏搜索结果
+        document.addEventListener('click', function(event) {
+            const searchResults = document.getElementById('searchResults');
+            const searchInput = document.getElementById('searchInput');
+            if (!searchResults.contains(event.target) && !searchInput.contains(event.target)) {
+                searchResults.style.display = 'none';
+            }
+        });
+
+        // 响应窗口大小变化
+        window.addEventListener('resize', function() {
+            myChart.resize();
+        });
+
+        // 添加输入框事件监听
+        document.getElementById('searchInput').addEventListener('input', function() {
+            if (this.value.trim()) {
+                searchNode();
+            } else {
+                document.getElementById('searchResults').style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html> 
