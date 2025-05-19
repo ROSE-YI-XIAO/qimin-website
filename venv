@@ -1,0 +1,7 @@
+<script>start("c:\\Users\\xiao\\PycharmProjects\\pythonProject\\.venv\\");</script>
+<script>onHasParentDirectory();</script>
+<script>addRow("Lib","Lib",1,0,"0 B",1731920195,"2024/11/18 16:56:35");</script>
+<script>addRow("Scripts","Scripts",1,0,"0 B",1747553255,"2025/5/18 15:27:35");</script>
+<script>addRow("share","share",1,0,"0 B",1747553252,"2025/5/18 15:27:32");</script>
+<script>addRow(".gitignore",".gitignore",0,42,"42 B",1731920195,"2024/11/18 16:56:35");</script>
+<script>addRow("pyvenv.cfg","pyvenv.cfg",0,406,"406 B",1731920196,"2024/11/18 16:56:36");</script>
